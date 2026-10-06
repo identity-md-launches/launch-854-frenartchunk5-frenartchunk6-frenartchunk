@@ -8,7 +8,6 @@ IMD swarm can deploy them with IMD's `evm_contracts` launch: constructors only, 
   10 backgrounds) and a 256-colour palette, 141.6 KB in all.
 - `src/FrenArtIndex.sol`: where every layer sits (chunk, offset, length), the colour tables, the face table, each
   chunk's code hash, and which chunks are framed.
-
 - `src/FrenRenderer.sol`: draws a fren from its combo and seed: an 84x84 8-bit bitmap inside an SVG, with its traits,
   as `tokenURI(tokenId, combo, seed)` and `pendingURI(tokenId)`. Its constructor takes the seven chunks and checks each
   one's code hash, so it can only ever draw this art. No owner, nothing to configure, nothing that changes.
