@@ -1,0 +1,30 @@
+{
+  "kind": "evm_contracts",
+  "contracts": [
+    {
+      "contract": "FrenArtChunk5",
+      "constructorArgs": []
+    },
+    {
+      "contract": "FrenArtChunk6",
+      "constructorArgs": []
+    },
+    {
+      "contract": "FrenArtChunk7",
+      "constructorArgs": []
+    },
+    {
+      "contract": "FrenRenderer",
+      "constructorArgs": [
+        "0xa92dAcfF6d6fcC218ADe20eD24857376BD8eBE81",
+        "0x9666A481e20F1dB59EEbD6c43D11Ae3505468c92",
+        "0x71BdEB749b3ee428730eBB3E9b34B03A99D82356",
+        "0x0C344484D960B8474a1EdcB5A5128e8D9C9F6B4d",
+        "$contract:FrenArtChunk5",
+        "$contract:FrenArtChunk6",
+        "$contract:FrenArtChunk7"
+      ]
+    }
+  ],
+  "notes": "Part 3 of 3 of the IMD6900 Frens on-chain art. Deploy FrenArtChunk5, FrenArtChunk6 and FrenArtChunk7 from src/FrenArtChunks.sol unchanged, with no constructor arguments, then FrenRenderer from src/FrenRenderer.sol. The renderer receives FrenArtChunk1 and FrenArtChunk2 from IMD launch #819, FrenArtChunk3 and FrenArtChunk4 from #838, and the three newly deployed chunks, in chunk order 1 through 7. FrenRenderer checks each chunk's code hash against FrenArtIndex. The chunks contain generated art data after a STOP byte; FrenArtChunk7 frames the data with a PUSH32 byte before each 32 bytes. These contracts have no owner and require no configuration, ETH funding or initialization calls."
+}
