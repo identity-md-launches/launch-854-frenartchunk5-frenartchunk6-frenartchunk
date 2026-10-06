@@ -26,6 +26,18 @@ The frens contract (`IMD6900Frens`, 0x69004fEd3d8a34FFA952d15A128f74D8340fa79d o
 renderer its owner points it at, until the owner freezes the art for good (`setRenderer`, `freezeArt`). The frens
 launch with a renderer of their own; once this one is deployed and checked on chain, the owner points the frens here.
 
+## Deployed (Ethereum)
+
+| Contract | Address | IMD launch | Transaction |
+|---|---|---|---|
+| FrenArtChunk1 | 0xa92dAcfF6d6fcC218ADe20eD24857376BD8eBE81 | #819 | 0x7b6503966cc85ffbf267a50625e47392554d6a30d47fa5bff884e0bc7110012d |
+| FrenArtChunk2 | 0x9666A481e20F1dB59EEbD6c43D11Ae3505468c92 | #819 | same |
+| FrenArtChunk3 | 0x71BdEB749b3ee428730eBB3E9b34B03A99D82356 | #838 | 0xcbee71603d55caf38ea7e4e961e10d689110db7554cf5ffdbcf44c9f04930903 |
+| FrenArtChunk4 | 0x0C344484D960B8474a1EdcB5A5128e8D9C9F6B4d | #838 | same |
+
+Each one's code hash is the one FrenArtIndex names; `test/OnChainChunks.fork.t.sol` draws the reference through them.
+(Launch #820 was parked by the admission scan described above, before chunk 4 was framed.)
+
 ## Tests
 
 `forge test` (offline, no RPC):
