@@ -21,6 +21,18 @@ contract Part3DeploymentProbe {
     }
 }
 
+/// @dev Measure a nested call so Foundry's top-level isolation cannot add intrinsic gas to this sample.
+contract Part3GasMeter {
+    function measure(Part3DeploymentProbe factory, bytes[] memory codes)
+        external
+        returns (address[] memory deployed, uint256 used)
+    {
+        uint256 beforeGas = gasleft();
+        deployed = factory.deploy(codes);
+        used = beforeGas - gasleft();
+    }
+}
+
 /// @notice Offline rehearsal of part 3 using the four requested dependency addresses.
 /// @dev Etched code comes from this repository, not mainnet; OnChainChunks.fork.t.sol checks live dependencies.
 contract Part3LaunchTest is Test {
@@ -33,7 +45,7 @@ contract Part3LaunchTest is Test {
     address[4] predicted;
     FrenRenderer renderer;
     uint256 deploymentGas;
-    uint256 calldataBytes;
+    uint256 intrinsicGas;
 
     function setUp() public {
         address[4] memory existing = [CHUNK1, CHUNK2, CHUNK3, CHUNK4];
@@ -43,6 +55,7 @@ contract Part3LaunchTest is Test {
         }
 
         Part3DeploymentProbe factory = new Part3DeploymentProbe();
+        Part3GasMeter meter = new Part3GasMeter();
         bytes[] memory codes = new bytes[](4);
         for (uint256 i; i < 3; ++i) {
             codes[i] = vm.getCode(string.concat("FrenArtChunks.sol:FrenArtChunk", vm.toString(i + 5)));
@@ -53,10 +66,13 @@ contract Part3LaunchTest is Test {
             abi.encode(CHUNK1, CHUNK2, CHUNK3, CHUNK4, predicted[0], predicted[1], predicted[2])
         );
         predicted[3] = _predict(address(factory), bytes32(uint256(3)), codes[3]);
-        calldataBytes = abi.encodeCall(factory.deploy, (codes)).length;
-        uint256 gasBefore = gasleft();
-        address[] memory deployed = factory.deploy(codes);
-        deploymentGas = gasBefore - gasleft();
+        bytes memory payload = abi.encodeCall(factory.deploy, (codes));
+        intrinsicGas = 21_000;
+        for (uint256 i; i < payload.length; ++i) {
+            intrinsicGas += payload[i] == 0 ? 4 : 16;
+        }
+        (address[] memory deployed, uint256 used) = meter.measure(factory, codes);
+        deploymentGas = used;
         applications = deployed;
         renderer = FrenRenderer(deployed[3]);
     }
@@ -109,10 +125,17 @@ contract Part3LaunchTest is Test {
         }
     }
 
-    function test_Part3Create2FitsOneTransaction() public {
-        // Conservative calldata cost plus the transaction base cost, with 5% reserved for factory overhead.
-        uint256 total = deploymentGas + 21_000 + 16 * calldataBytes;
-        emit log_named_uint("part 3 CREATE2 gas (with calldata)", total);
-        assertLt(total, uint256(1 << 24) * 95 / 100);
+    function test_Part3Create2GasIsMeteredAndWithinLocalBudget() public {
+        uint256 runtimeBytes;
+        for (uint256 i; i < applications.length; ++i) {
+            runtimeBytes += applications[i].code.length;
+        }
+        assertGe(deploymentGas, 200 * runtimeBytes, "CREATE2 code deposit is not metered");
+        // Intrinsic gas is counted once, with exact zero/nonzero calldata pricing. The existing 95% budget
+        // bounds this local rehearsal only: it neither measures the production factory nor validates the
+        // deployer's buffered gas LIMIT. That unresolved submission requirement is in .imd-findings.json.
+        uint256 total = deploymentGas + intrinsicGas;
+        emit log_named_uint("part 3 local CREATE2 gas (with intrinsic)", total);
+        assertLt(total, uint256(1 << 24) * 95 / 100, "local creation gas budget");
     }
 }
