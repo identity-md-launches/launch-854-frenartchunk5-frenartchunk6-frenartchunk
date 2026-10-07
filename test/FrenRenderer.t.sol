@@ -4,7 +4,13 @@ pragma solidity ^0.8.26;
 import {Test} from "forge-std/Test.sol";
 import {FrenRenderer} from "../src/FrenRenderer.sol";
 import {
-    FrenArtChunk1, FrenArtChunk2, FrenArtChunk3, FrenArtChunk4, FrenArtChunk5, FrenArtChunk6, FrenArtChunk7
+    FrenArtChunk1,
+    FrenArtChunk2,
+    FrenArtChunk3,
+    FrenArtChunk4,
+    FrenArtChunk5,
+    FrenArtChunk6,
+    FrenArtChunk7
 } from "../src/FrenArtChunks.sol";
 import {FrenArtRef, FrenRendererRef} from "./ref/FrenRendererRef.sol";
 
@@ -12,20 +18,31 @@ import {FrenArtRef, FrenRendererRef} from "./ref/FrenRendererRef.sol";
 ///      transaction, constructors only. The third names the first two launches' chunks by address.
 contract ImdStyleArtLaunches {
     function launch1() external returns (address c1, address c2) {
-        c1 = address(new FrenArtChunk1());
-        c2 = address(new FrenArtChunk2());
+        c1 = _create(type(FrenArtChunk1).creationCode);
+        c2 = _create(type(FrenArtChunk2).creationCode);
     }
 
     function launch2() external returns (address c3, address c4) {
-        c3 = address(new FrenArtChunk3());
-        c4 = address(new FrenArtChunk4());
+        c3 = _create(type(FrenArtChunk3).creationCode);
+        c4 = _create(type(FrenArtChunk4).creationCode);
     }
 
-    function launch3(address c1, address c2, address c3, address c4) external returns (address c5, address c6, address c7, address r) {
-        c5 = address(new FrenArtChunk5());
-        c6 = address(new FrenArtChunk6());
-        c7 = address(new FrenArtChunk7());
-        r = address(new FrenRenderer(c1, c2, c3, c4, c5, c6, c7));
+    function launch3(address c1, address c2, address c3, address c4)
+        external
+        returns (address c5, address c6, address c7, address r)
+    {
+        c5 = _create(type(FrenArtChunk5).creationCode);
+        c6 = _create(type(FrenArtChunk6).creationCode);
+        c7 = _create(type(FrenArtChunk7).creationCode);
+        r = _create(bytes.concat(type(FrenRenderer).creationCode, abi.encode(c1, c2, c3, c4, c5, c6, c7)));
+    }
+
+    /// @dev Assembly CREATE cannot be rewritten to unmetered vm.deployCode by dynamic test linking.
+    function _create(bytes memory code) private returns (address deployed) {
+        assembly ("memory-safe") {
+            deployed := create(0, add(code, 32), mload(code))
+        }
+        require(deployed != address(0) && deployed.code.length > 0, "application constructor failed");
     }
 }
 
@@ -75,8 +92,11 @@ contract FrenRendererTest is Test {
         bytes[] memory pal = new bytes[](1);
         pal[0] = vm.readFileBinary(string.concat(ART, "palette.bin"));
         return new FrenRendererRef(
-            art.write(pal)[0], ptrs, vm.readFileBinary(string.concat(ART, "tables.bin")),
-            vm.readFileBinary(string.concat(ART, "facetable.bin")), uint8(vm.parseJsonUint(manifest, ".shadow"))
+            art.write(pal)[0],
+            ptrs,
+            vm.readFileBinary(string.concat(ART, "tables.bin")),
+            vm.readFileBinary(string.concat(ART, "facetable.bin")),
+            uint8(vm.parseJsonUint(manifest, ".shadow"))
         );
     }
 
@@ -85,7 +105,9 @@ contract FrenRendererTest is Test {
         uint256[8] memory n = [uint256(3), 13, 4, 3, 6, 3, 10, 16];
         uint256[8] memory shift = [uint256(0), 2, 6, 8, 10, 13, 15, 19];
         uint256 c;
-        for (uint256 t; t < 8; ++t) c |= ((uint256(keccak256(abi.encode(x, t))) % n[t]) << shift[t]);
+        for (uint256 t; t < 8; ++t) {
+            c |= ((uint256(keccak256(abi.encode(x, t))) % n[t]) << shift[t]);
+        }
         return uint24(c);
     }
 
@@ -109,7 +131,11 @@ contract FrenRendererTest is Test {
         for (uint256 i; i < 24; ++i) {
             uint24 combo = _combo(i);
             uint256 seed = uint256(keccak256(abi.encode("seed", i)));
-            assertEq(keccak256(bytes(r.tokenURI(i + 1, combo, seed))), keccak256(bytes(ref.tokenURI(i + 1, combo, seed))), "tokenURI");
+            assertEq(
+                keccak256(bytes(r.tokenURI(i + 1, combo, seed))),
+                keccak256(bytes(ref.tokenURI(i + 1, combo, seed))),
+                "tokenURI"
+            );
         }
         for (uint256 bg; bg < 10; ++bg) {
             uint24 combo = uint24(_combo(100 + bg) & ~uint256(15 << 15) | bg << 15);
@@ -122,7 +148,8 @@ contract FrenRendererTest is Test {
     }
 
     function test_RejectsCombosOutsideTheArt() public {
-        uint24[6] memory bad = [uint24(3), uint24(13 << 2), uint24(3 << 8), uint24(6 << 10), uint24(3 << 13), uint24(10 << 15)];
+        uint24[6] memory bad =
+            [uint24(3), uint24(13 << 2), uint24(3 << 8), uint24(6 << 10), uint24(3 << 13), uint24(10 << 15)];
         for (uint256 i; i < bad.length; ++i) {
             vm.expectRevert(); // Missing, or an out-of-range read of the index
             r.canvas(bad[i], 0);
@@ -141,12 +168,23 @@ contract FrenRendererTest is Test {
 
     /* ── the launches ────────────────────────────────────────────── */
 
-    /// @dev Each launch, with a transaction's base cost and its initcode as calldata, under the per-transaction cap
-    function test_LaunchesFitTransactions() public {
+    /// @dev Local CREATE execution plus a conservative initcode calldata allowance. This is a usage budget,
+    /// not a production gas-limit check: factory overhead and the deployer's buffer policy are unavailable here.
+    /// The unresolved EIP-7825 submission requirement is reported in .imd-findings.json.
+    function test_LaunchCreationGasIsMeteredAndWithinLocalBudget() public {
         for (uint256 i; i < 3; ++i) {
+            uint256 runtimeBytes;
+            uint256 end = i == 2 ? 7 : (i + 1) * 2;
+            for (uint256 j = i * 2; j < end; ++j) {
+                runtimeBytes += chunks[j].code.length;
+            }
+            if (i == 2) runtimeBytes += address(r).code.length;
+            assertGe(launchGas[i], 200 * runtimeBytes, "CREATE code deposit is not metered");
             uint256 total = launchGas[i] + 21_000 + 16 * launchInitBytes[i];
-            emit log_named_uint(string.concat("launch ", vm.toString(i + 1), " gas (with calldata)"), total);
-            assertLt(total, TX_CAP * 95 / 100);
+            emit log_named_uint(
+                string.concat("launch ", vm.toString(i + 1), " local CREATE gas (with initcode allowance)"), total
+            );
+            assertLt(total, TX_CAP * 95 / 100, "local creation gas budget");
         }
     }
 
